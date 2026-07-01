@@ -5,11 +5,11 @@ import openpyxl
 
 @dataclass
 class OSSEntry:
-    row_num: int
+    row_num: int          # 最初に登場した行番号
     oss_name: str
-    license_name: str
-    copyright: str
-    license_text: str
+    license_names: list[str]   # E列: 複数ライセンス対応
+    copyrights: list[str]      # AA列: 複数著作権者対応
+    license_texts: list[str]   # AB列: 複数行ライセンス原文対応
 
 
 @dataclass
@@ -19,92 +19,106 @@ class OSSData:
     def add(self, entry: OSSEntry):
         self.entries.append(entry)
 
+    def last(self) -> Optional[OSSEntry]:
+        return self.entries[-1] if self.entries else None
+
 
 # 列番号定数（1始まり）
 COL_A  = 1   # 終了判定用
 COL_B  = 2   # OSS名
-COL_E  = 5   # ライセンス
+COL_E  = 5   # ライセンス名
 COL_AA = 27  # Copyright
 COL_AB = 28  # ライセンス原文
 
-COLUMN_NAMES = {
-    COL_B:  "B",
-    COL_E:  "E",
-    COL_AA: "AA",
-    COL_AB: "AB",
-}
+# 空欄チェック対象（B列のみ必須、他は追記判定後にチェック）
+REQUIRED_COL = {COL_B: "B"}
 
 START_ROW = 9
 
 
 # ------------------------------------------------------------------ #
 # ダミーワークシート                                                    #
-# openpyxl の ws と同じ .cell(row, column).value インターフェースを持つ  #
 # ------------------------------------------------------------------ #
 
 # ダミーデータ定義
-# キー: (row, col)  ※ 9行目スタート、A列(1)に連番を入れて終了判定に使う
+# 各行は dict[col_num -> value]
+# B列が同じ → 追記ケースをテスト
 _DUMMY_ROWS = [
-    {
-        COL_A:  1,
-        COL_B:  "requests",
-        COL_E:  "Apache-2.0",
-        COL_AA: "Copyright 2023 Kenneth Reitz",
-        COL_AB: (
-            "Apache License\n"
-            "Version 2.0, January 2004\n"
-            "http://www.apache.org/licenses/\n\n"
-            "TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION\n"
-            "（省略）"
-        ),
-    },
-    {
-        COL_A:  2,
-        COL_B:  "numpy",
-        COL_E:  "BSD-3-Clause",
-        COL_AA: "Copyright (c) 2005-2023, NumPy Developers",
-        COL_AB: (
-            "BSD 3-Clause License\n\n"
-            "Redistribution and use in source and binary forms, with or without\n"
-            "modification, are permitted provided that the following conditions are met:\n"
-            "（省略）"
-        ),
-    },
-    {
-        COL_A:  3,
-        COL_B:  "flask",
-        COL_E:  "BSD-3-Clause",
-        COL_AA: "Copyright 2010 Pallets",
-        COL_AB: (
-            "BSD 3-Clause License\n\n"
-            "Copyright 2010 Pallets\n\n"
-            "Redistribution and use in source and binary forms ...\n"
-            "（省略）"
-        ),
-    },
+    # ── requests: 通常ケース（1行完結）
+    {COL_A: 1, COL_B: "requests",
+     COL_E: "Apache-2.0",
+     COL_AA: "Copyright 2023 Kenneth Reitz",
+     COL_AB: "Apache License\nVersion 2.0, January 2004\nFull license text here."},
+
+    # ── numpy: 準正常系ケース1 著作権者が複数行にまたがる
+    {COL_A: 2, COL_B: "numpy",
+     COL_E: "BSD-3-Clause",
+     COL_AA: "Copyright (c) NumPy Developers",
+     COL_AB: "BSD 3-Clause License\n\nRedistribution and use in source..."},
+    {COL_A: 3, COL_B: "numpy",   # 同じOSS名 → AA列を追記
+     COL_E: None,                # E列なし → ライセンス名は追記しない
+     COL_AA: "Copyright 2010 Pallets",
+     COL_AB: None},              # AB列なし → ライセンス原文は追記しない
+
+    # ── biglib: 準正常系ケース2 ライセンス原文が複数行にまたがる
+    {COL_A: 4, COL_B: "biglib",
+     COL_E: "GPL-3.0",
+     COL_AA: "Copyright (C) 2007 Free Software Foundation",
+     COL_AB: "GNU GENERAL PUBLIC LICENSE\nVersion 3, 29 June 2007\n\n"
+             "Everyone is permitted to copy and distribute verbatim copies\n"
+             "of this license document, but changing it is not allowed.\n\n"
+             "a copy of the Program in return for a fee."},
+    {COL_A: 5, COL_B: "biglib",  # 同じOSS名 → AB列を前行に続けて追記
+     COL_E: None,
+     COL_AA: None,
+     COL_AB: "END OF TERMS AND CONDITIONS"},
+
+    # ── multilic: 準正常系ケース3 複数ライセンスをもつOSS
+    {COL_A: 6, COL_B: "multilic",
+     COL_E: "MIT",
+     COL_AA: "Copyright (c) 2020 Example Corp",
+     COL_AB: "MIT License\n\nPermission is hereby granted..."},
+    {COL_A: 7, COL_B: "multilic",  # 同じOSS名 → E列をカンマ区切りで追記
+     COL_E: "BSD-3-Clause",
+     COL_AA: None,
+     COL_AB: None},
+    {COL_A: 8, COL_B: "multilic",
+     COL_E: "GPL-2.0",
+     COL_AA: None,
+     COL_AB: None},
+
+    # ── complexlib: 準正常系ケース4 準正常系1～3の全部の組み合わせ
+    #   著作権者が2行（準正常系ケース1）
+    #   ライセンス原文が3行に分割（準正常系ケース2）
+    #   ライセンス名が2種類（準正常系ケース3）
+    {COL_A:  9, COL_B: "complexlib",
+     COL_E:  "LGPL-2.1",
+     COL_AA: "Copyright (C) 1991 Free Software Foundation",
+     COL_AB: "GNU LESSER GENERAL PUBLIC LICENSE\nVersion 2.1, February 1999\n\n"
+             "Everyone is permitted to copy and distribute verbatim copies [part1]"},
+    {COL_A: 10, COL_B: "complexlib",  # 準正常系ケース1: 著作権者追加 / 準正常系ケース2: 原文続き / 準正常系ケース3: ライセンス追加
+     COL_E:  "MIT",
+     COL_AA: "Copyright (c) 2001 Example Contributor",
+     COL_AB: "of this license document, but changing it is not allowed. [part2]"},
+    {COL_A: 11, COL_B: "complexlib",  # 準正常系ケース1: 原文続き（E列・AA列はなし）
+     COL_E:  None,
+     COL_AA: None,
+     COL_AB: "END OF TERMS AND CONDITIONS [part3]"},
 ]
 
 
 class _Cell:
-    """openpyxl の Cell を模倣する最小実装"""
     def __init__(self, value):
         self.value = value
 
 
 class DummyWorksheet:
-    """
-    openpyxl の Worksheet と同じ .cell(row, column) インターフェースを持つ
-    ダミーワークシート。Excelファイルが無い環境でのテスト用。
-    """
-
     def __init__(self):
-        # (row, col) -> value のマップを構築
         self._data: dict[tuple[int, int], object] = {}
         for i, row_dict in enumerate(_DUMMY_ROWS):
             r = START_ROW + i
             for col, val in row_dict.items():
                 self._data[(r, col)] = val
-        # max_row を設定（データの最終行）
         self.max_row = START_ROW + len(_DUMMY_ROWS) - 1
 
     def cell(self, row: int, column: int) -> _Cell:
@@ -131,29 +145,72 @@ def load_excel(filepath: str, sheetname: str, use_dummy: bool = False) -> OSSDat
 
 def _parse_worksheet(ws) -> OSSData:
     data = OSSData()
+
     for row_idx in range(START_ROW, ws.max_row + 1):
         a_val = ws.cell(row=row_idx, column=COL_A).value
         if a_val is None or str(a_val).strip() == "":
             break
-        entry = _read_row(ws, row_idx)
-        data.add(entry)
+
+        # B列（OSS名）は必須
+        b_val = ws.cell(row=row_idx, column=COL_B).value
+        if b_val is None or str(b_val).strip() == "":
+            raise ValueError(
+                f"{row_idx}行, B列が空欄であるため中断、空欄は無いようにしてください"
+            )
+        oss_name = str(b_val).strip()
+
+        last = data.last()
+
+        if last is not None and last.oss_name == oss_name:
+            # ── 同じOSS名 → 追記処理
+            _append_row(ws, row_idx, last)
+        else:
+            # ── 新しいOSS → 新規エントリ作成（E/AA/AB列は必須チェック）
+            entry = _new_entry(ws, row_idx, oss_name)
+            data.add(entry)
+
     return data
 
 
-def _read_row(ws, row_idx: int) -> OSSEntry:
+def _new_entry(ws, row_idx: int, oss_name: str) -> OSSEntry:
+    """新規エントリ作成。E/AA/AB列は必須。"""
+    cols = {
+        COL_E:  "E",
+        COL_AA: "AA",
+        COL_AB: "AB",
+    }
     values = {}
-    for col, col_name in COLUMN_NAMES.items():
-        cell_val = ws.cell(row=row_idx, column=col).value
-        if cell_val is None or str(cell_val).strip() == "":
+    for col, col_name in cols.items():
+        val = ws.cell(row=row_idx, column=col).value
+        if val is None or str(val).strip() == "":
             raise ValueError(
                 f"{row_idx}行, {col_name}列が空欄であるため中断、空欄は無いようにしてください"
             )
-        values[col] = str(cell_val).strip()
+        values[col] = str(val).strip()
 
     return OSSEntry(
         row_num=row_idx,
-        oss_name=values[COL_B],
-        license_name=values[COL_E],
-        copyright=values[COL_AA],
-        license_text=values[COL_AB],
+        oss_name=oss_name,
+        license_names=[values[COL_E]],
+        copyrights=[values[COL_AA]],
+        license_texts=[values[COL_AB]],
     )
+
+
+def _append_row(ws, row_idx: int, entry: OSSEntry):
+    """同一OSS名の追加行を既存エントリに追記する。"""
+    e_val  = ws.cell(row=row_idx, column=COL_E).value
+    aa_val = ws.cell(row=row_idx, column=COL_AA).value
+    ab_val = ws.cell(row=row_idx, column=COL_AB).value
+
+    # E列: 記載があればカンマ区切りで追加
+    if e_val is not None and str(e_val).strip():
+        entry.license_names.append(str(e_val).strip())
+
+    # AA列: 記載があれば改行区切りで追加
+    if aa_val is not None and str(aa_val).strip():
+        entry.copyrights.append(str(aa_val).strip())
+
+    # AB列: 記載があれば続けて追記（改行で連結）
+    if ab_val is not None and str(ab_val).strip():
+        entry.license_texts.append(str(ab_val).strip())
