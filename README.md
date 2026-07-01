@@ -7,12 +7,12 @@ This program is designed to read data from a specified sheet within a designated
 - python test_runner.py
 
 ### Output text file from dummy data (default is text format option)
-- python __main__.py --test
-- python __main__.py --test [format]
+- python \_\_main\_\_.py --test
+- python \_\_main\_\_.py --test [format]
 
 ---
 ## Running
-- python __main__.py <filename> <sheetname> [format]
+- python \_\_main\_\_.py <filename> <sheetname> [format]
 
 ### options
 | Option | Description | Required | Default |
@@ -22,8 +22,8 @@ This program is designed to read data from a specified sheet within a designated
 | format | output text format | no | default |
 
 ### e.x
-- python __main__.py oss_list.xlsx listsheet 
-- python __main__.py oss_list.xlsx listsheet default
+- python \_\_main\_\_.py oss_list.xlsx listsheet 
+- python \_\_main\_\_.py oss_list.xlsx listsheet default
 
 ---
 ## ToDo
