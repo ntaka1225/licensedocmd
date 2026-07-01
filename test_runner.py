@@ -1,15 +1,16 @@
 """
 テストランナー
-各テストケースを実行し、結果を検証する。
 
 Usage:
     python test_runner.py
 """
 
 import sys
-import traceback
-from model import load_excel, DummyWorksheet, OSSData, START_ROW, COL_B, COL_E, COL_AA, COL_AB
-from controller import generate_text, format_default
+from model import (
+    load_excel, DummyWorksheet, OSSData, OSSEntry,
+    _parse_worksheet, _Cell, START_ROW, COL_A, COL_B, COL_E, COL_AA, COL_AB
+)
+from controller import generate_text
 
 PASS = "\033[32mPASS\033[0m"
 FAIL = "\033[31mFAIL\033[0m"
@@ -18,7 +19,6 @@ results = []
 
 
 def test(name: str):
-    """テストケースデコレータ"""
     def decorator(fn):
         try:
             fn()
@@ -33,69 +33,164 @@ def test(name: str):
 
 
 # ------------------------------------------------------------------ #
-# テストケース                                                          #
+# DummyWorksheet
 # ------------------------------------------------------------------ #
+print("■ DummyWorksheet")
 
-@test("DummyWorksheet: cell() が正しい値を返す")
+@test("cell() が正しい値を返す")
 def _():
     ws = DummyWorksheet()
-    assert ws.cell(row=START_ROW, column=COL_B).value == "requests", "OSS名が一致しない"
-    assert ws.cell(row=START_ROW, column=COL_E).value == "Apache-2.0", "ライセンスが一致しない"
-    assert ws.cell(row=START_ROW + 1, column=COL_B).value == "numpy"
+    assert ws.cell(row=START_ROW, column=COL_B).value == "requests"
+    assert ws.cell(row=START_ROW, column=COL_E).value == "Apache-2.0"
 
-@test("DummyWorksheet: データ範囲外は None を返す")
+@test("データ範囲外は None を返す")
 def _():
     ws = DummyWorksheet()
     assert ws.cell(row=1, column=1).value is None
 
-@test("load_excel(use_dummy=True): OSSData が正しく生成される")
+
+# ------------------------------------------------------------------ #
+# load_excel（ダミー）
+# ------------------------------------------------------------------ #
+print("■ load_excel(use_dummy=True)")
+
+@test("OSSData が生成される（4件）")
 def _():
     data = load_excel(None, None, use_dummy=True)
     assert isinstance(data, OSSData)
-    assert len(data.entries) == 3, f"件数が想定と異なる: {len(data.entries)}"
+    assert len(data.entries) == 5, f"件数が想定と異なる: {len(data.entries)}"
 
-@test("load_excel(use_dummy=True): 各フィールドが正しく格納される")
+@test("requests: 通常1行完結エントリ")
 def _():
     data = load_excel(None, None, use_dummy=True)
     e = data.entries[0]
     assert e.oss_name == "requests"
-    assert e.license_name == "Apache-2.0"
-    assert "Kenneth Reitz" in e.copyright
-    assert "Apache License" in e.license_text
+    assert e.license_names == ["Apache-2.0"]
+    assert e.copyrights == ["Copyright 2023 Kenneth Reitz"]
+    assert len(e.license_texts) == 1
+    assert "Apache License" in e.license_texts[0]
 
-@test("generate_text: デフォルトフォーマットで出力される")
+@test("準正常系ケース1: numpy - 著作権者が複数行にまたがる")
 def _():
     data = load_excel(None, None, use_dummy=True)
-    text = generate_text(data, None)
-    assert "requests" in text
-    assert "Apache-2.0" in text
-    assert "Copyright" in text
-    assert "---" in text
-    assert "=" * 10 in text
+    e = data.entries[1]
+    assert e.oss_name == "numpy"
+    assert e.copyrights == ["Copyright (c) NumPy Developers", "Copyright 2010 Pallets"], \
+        f"copyrights が想定と異なる: {e.copyrights}"
+    # E列・AB列はセカンド行がNoneなので増えない
+    assert len(e.license_names) == 1
+    assert len(e.license_texts) == 1
 
-@test("generate_text: 存在しないフォーマット名でValueError")
+@test("準正常系ケース2: biglib - ライセンス原文が複数行にまたがる")
+def _():
+    data = load_excel(None, None, use_dummy=True)
+    e = data.entries[2]
+    assert e.oss_name == "biglib"
+    assert len(e.license_texts) == 2, f"license_texts数が想定と異なる: {len(e.license_texts)}"
+    combined = "\n".join(e.license_texts)
+    assert "a copy of the Program in return for a fee." in combined
+    assert "END OF TERMS AND CONDITIONS" in combined
+
+@test("準正常系ケース3: multilic - 複数ライセンス名をもつ")
+def _():
+    data = load_excel(None, None, use_dummy=True)
+    e = data.entries[3]
+    assert e.oss_name == "multilic"
+    assert e.license_names == ["MIT", "BSD-3-Clause", "GPL-2.0"], \
+        f"license_names が想定と異なる: {e.license_names}"
+    # AA/AB列は追加行がNoneなので1件のまま
+    assert len(e.copyrights) == 1
+    assert len(e.license_texts) == 1
+
+
+@test("準正常系ケース4: complexlib - 全組み合わせ（データ構造）")
+def _():
+    data = load_excel(None, None, use_dummy=True)
+    e = data.entries[4]
+    assert e.oss_name == "complexlib"
+    # 準正常系ケース3: ライセンス名が2種類
+    assert e.license_names == ["LGPL-2.1", "MIT"], \
+        f"license_names が想定と異なる: {e.license_names}"
+    # 準正常系ケース1: 著作権者が2行
+    assert e.copyrights == [
+        "Copyright (C) 1991 Free Software Foundation",
+        "Copyright (c) 2001 Example Contributor",
+    ], f"copyrights が想定と異なる: {e.copyrights}"
+    # 準正常系ケース2: 原文が3分割
+    assert len(e.license_texts) == 3, \
+        f"license_texts数が想定と異なる: {len(e.license_texts)}"
+    assert "[part1]" in e.license_texts[0]
+    assert "[part2]" in e.license_texts[1]
+    assert "[part3]" in e.license_texts[2]
+
+
+# ------------------------------------------------------------------ #
+# generate_text（フォーマット出力）
+# ------------------------------------------------------------------ #
+print("■ generate_text")
+
+@test("準正常系ケース1: Copyright が改行区切りで出力される")
+def _():
+    data = load_excel(None, None, use_dummy=True)
+    text = generate_text(data)
+    assert "Copyright (c) NumPy Developers\n           Copyright 2010 Pallets" in text, \
+        "著作権者の改行＋インデント連結が出力に含まれない"
+
+@test("準正常系ケース2: ライセンス原文が連結して出力される")
+def _():
+    data = load_excel(None, None, use_dummy=True)
+    text = generate_text(data)
+    assert "a copy of the Program in return for a fee.\nEND OF TERMS AND CONDITIONS" in text, \
+        "ライセンス原文の連結が出力に含まれない"
+
+@test("準正常系ケース3: License がカンマ区切りで出力される")
+def _():
+    data = load_excel(None, None, use_dummy=True)
+    text = generate_text(data)
+    assert "License: MIT, BSD-3-Clause, GPL-2.0" in text, \
+        "複数ライセンスのカンマ区切りが出力に含まれない"
+
+@test("準正常系ケース4: complexlib - 準正常系ケース1～3の全組み合わせ（出力テキスト）")
+def _():
+    data = load_excel(None, None, use_dummy=True)
+    text = generate_text(data)
+    # ケース2: カンマ区切りライセンス
+    assert "License: LGPL-2.1, MIT" in text, \
+        f"複数ライセンスのカンマ区切りが出力に含まれない"
+    # ケース3: 改行区切り著作権者
+    assert "Copyright (C) 1991 Free Software Foundation\n           Copyright (c) 2001 Example Contributor" in text, \
+        f"著作権者の改行＋インデント連結が出力に含まれない"
+    # ケース1: 原文3ブロック連結
+    assert "[part1]" in text and "[part2]" in text and "[part3]" in text, \
+        f"ライセンス原文の3分割連結が出力に含まれない"
+    # 連結順序の確認
+    idx1 = text.index("[part1]")
+    idx2 = text.index("[part2]")
+    idx3 = text.index("[part3]")
+    assert idx1 < idx2 < idx3, "ライセンス原文の順序が正しくない"
+
+
+@test("存在しないフォーマット名で ValueError")
 def _():
     data = load_excel(None, None, use_dummy=True)
     try:
         generate_text(data, "no_such_format")
         raise AssertionError("例外が発生しなかった")
     except ValueError:
-        pass  # 期待通り
+        pass
 
-@test("空欄チェック: AA列が空のダミーでエラーが発生する")
+
+# ------------------------------------------------------------------ #
+# エラーチェック
+# ------------------------------------------------------------------ #
+print("■ エラーチェック")
+
+@test("新規エントリのAA列が空欄でエラー発生・列名がメッセージに含まれる")
 def _():
-    from model import _parse_worksheet, _Cell, START_ROW
-
     class BrokenWS:
         max_row = START_ROW
         def cell(self, row, column):
-            data = {
-                1: 1,        # A列
-                2: "lib",    # B列
-                5: "MIT",    # E列
-                27: "",      # AA列 → 空欄
-                28: "text",  # AB列
-            }
+            data = {COL_A: 1, COL_B: "lib", COL_E: "MIT", COL_AA: "", COL_AB: "text"}
             return _Cell(data.get(column, None))
 
     try:
@@ -104,11 +199,24 @@ def _():
     except ValueError as e:
         assert "AA列" in str(e), f"エラーメッセージに列名が含まれない: {e}"
 
+@test("B列が空欄でエラー発生")
+def _():
+    class BrokenWS:
+        max_row = START_ROW
+        def cell(self, row, column):
+            data = {COL_A: 1, COL_B: ""}
+            return _Cell(data.get(column, None))
+
+    try:
+        _parse_worksheet(BrokenWS())
+        raise AssertionError("例外が発生しなかった")
+    except ValueError as e:
+        assert "B列" in str(e)
+
 
 # ------------------------------------------------------------------ #
-# 集計                                                                  #
+# 集計
 # ------------------------------------------------------------------ #
-
 total  = len(results)
 passed = sum(1 for _, ok, _ in results if ok)
 failed = total - passed
