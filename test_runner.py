@@ -58,7 +58,7 @@ print("■ load_excel(use_dummy=True)")
 def _():
     data = load_excel(None, None, use_dummy=True)
     assert isinstance(data, OSSData)
-    assert len(data.entries) == 5, f"件数が想定と異なる: {len(data.entries)}"
+    assert len(data.entries) == 6, f"件数が想定と異なる: {len(data.entries)}"
 
 @test("requests: 通常1行完結エントリ")
 def _():
@@ -103,10 +103,23 @@ def _():
     assert len(e.license_texts) == 1
 
 
-@test("準正常系ケース4: complexlib - 全組み合わせ（データ構造）")
+@test("準正常系ケース5: dirtylib - _x000C_ が除去される（データ構造）")
 def _():
     data = load_excel(None, None, use_dummy=True)
     e = data.entries[4]
+    assert e.oss_name == "dirtylib",              f"OSS名に_x000C_が残っている: {e.oss_name!r}"
+    assert e.license_names == ["MIT"],             f"ライセンス名に_x000C_が残っている: {e.license_names}"
+    assert "_x000C_" not in e.copyrights[0],      f"著作権者に_x000C_が残っている: {e.copyrights}"
+    assert "_x000C_" not in e.license_texts[0],   f"ライセンス原文に_x000C_が残っている: {e.license_texts}"
+    # 追記行も除去されている
+    assert "_x000C_" not in e.copyrights[1],      f"追記著作権者に_x000C_が残っている: {e.copyrights}"
+    assert "_x000C_" not in e.license_texts[1],   f"追記ライセンス原文に_x000C_が残っている: {e.license_texts}"
+
+
+@test("準正常系ケース6: complexlib - 全組み合わせ（データ構造）")
+def _():
+    data = load_excel(None, None, use_dummy=True)
+    e = data.entries[5]
     assert e.oss_name == "complexlib"
     # 準正常系ケース3: ライセンス名が2種類
     assert e.license_names == ["LGPL-2.1", "MIT"], \
@@ -150,7 +163,18 @@ def _():
     assert "License: MIT, BSD-3-Clause, GPL-2.0" in text, \
         "複数ライセンスのカンマ区切りが出力に含まれない"
 
-@test("準正常系ケース4: complexlib - 準正常系ケース1～3の全組み合わせ（出力テキスト）")
+@test("準正常系ケース5: dirtylib - _x000C_ が除去されて出力される")
+def _():
+    data = load_excel(None, None, use_dummy=True)
+    text = generate_text(data)
+    assert "_x000C_" not in text, f"出力テキストに_x000C_が残っている"
+    # 正しい値が含まれている
+    assert "dirtylib" in text
+    assert "License: MIT" in text
+    assert "Copyright 2024 Dirty Corp" in text
+
+
+@test("準正常系ケース6: complexlib - 準正常系ケース1～3の全組み合わせ（出力テキスト）")
 def _():
     data = load_excel(None, None, use_dummy=True)
     text = generate_text(data)
