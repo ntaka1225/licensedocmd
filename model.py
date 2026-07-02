@@ -87,20 +87,30 @@ _DUMMY_ROWS = [
      COL_AA: None,
      COL_AB: None},
 
-    # ── complexlib: 準正常系ケース4 準正常系1～3の全部の組み合わせ
+    # ── dirtylib: 準正常系ケース5 _x000C_ が混入しているケース
+    {COL_A: 9, COL_B: "dirtylib_x000C_",
+     COL_E: "MIT_x000C_",
+     COL_AA: "Copyright_x000C_ 2024 Dirty Corp",
+     COL_AB: "MIT License_x000C_\n\nPermission is hereby granted_x000C_..."},
+    {COL_A: 10, COL_B: "dirtylib_x000C_",  # 追記行にも混入
+     COL_E: None,
+     COL_AA: "Copyright_x000C_ 2025 Another Author",
+     COL_AB: "Additional terms_x000C_ here."},
+
+    # ── complexlib: 準正常系ケース6 準正常系1～3の全部の組み合わせ
     #   著作権者が2行（準正常系ケース1）
     #   ライセンス原文が3行に分割（準正常系ケース2）
     #   ライセンス名が2種類（準正常系ケース3）
-    {COL_A:  9, COL_B: "complexlib",
+    {COL_A:  11, COL_B: "complexlib",
      COL_E:  "LGPL-2.1",
      COL_AA: "Copyright (C) 1991 Free Software Foundation",
      COL_AB: "GNU LESSER GENERAL PUBLIC LICENSE\nVersion 2.1, February 1999\n\n"
              "Everyone is permitted to copy and distribute verbatim copies [part1]"},
-    {COL_A: 10, COL_B: "complexlib",  # 準正常系ケース1: 著作権者追加 / 準正常系ケース2: 原文続き / 準正常系ケース3: ライセンス追加
+    {COL_A: 12, COL_B: "complexlib",  # 準正常系ケース1: 著作権者追加 / 準正常系ケース2: 原文続き / 準正常系ケース3: ライセンス追加
      COL_E:  "MIT",
      COL_AA: "Copyright (c) 2001 Example Contributor",
      COL_AB: "of this license document, but changing it is not allowed. [part2]"},
-    {COL_A: 11, COL_B: "complexlib",  # 準正常系ケース1: 原文続き（E列・AA列はなし）
+    {COL_A: 13, COL_B: "complexlib",  # 準正常系ケース2: 原文続き（E列・AA列はなし）
      COL_E:  None,
      COL_AA: None,
      COL_AB: "END OF TERMS AND CONDITIONS [part3]"},
@@ -128,6 +138,11 @@ class DummyWorksheet:
 # ------------------------------------------------------------------ #
 # Excel / ダミー読み込み                                               #
 # ------------------------------------------------------------------ #
+
+def _sanitize(value) -> str:
+    """セル値を文字列化し、_x000C_（フォームフィード）を除去して返す。"""
+    return str(value).replace("_x000C_", "").strip()
+
 
 def load_excel(filepath: str, sheetname: str, use_dummy: bool = False) -> OSSData:
     if use_dummy:
@@ -157,7 +172,7 @@ def _parse_worksheet(ws) -> OSSData:
             raise ValueError(
                 f"{row_idx}行, B列が空欄であるため中断、空欄は無いようにしてください"
             )
-        oss_name = str(b_val).strip()
+        oss_name = _sanitize(b_val)
 
         last = data.last()
 
@@ -182,11 +197,11 @@ def _new_entry(ws, row_idx: int, oss_name: str) -> OSSEntry:
     values = {}
     for col, col_name in cols.items():
         val = ws.cell(row=row_idx, column=col).value
-        if val is None or str(val).strip() == "":
+        if val is None or _sanitize(val) == "":
             raise ValueError(
                 f"{row_idx}行, {col_name}列が空欄であるため中断、空欄は無いようにしてください"
             )
-        values[col] = str(val).strip()
+        values[col] = _sanitize(val)
 
     return OSSEntry(
         row_num=row_idx,
@@ -204,13 +219,13 @@ def _append_row(ws, row_idx: int, entry: OSSEntry):
     ab_val = ws.cell(row=row_idx, column=COL_AB).value
 
     # E列: 記載があればカンマ区切りで追加
-    if e_val is not None and str(e_val).strip():
-        entry.license_names.append(str(e_val).strip())
+    if e_val is not None and _sanitize(e_val):
+        entry.license_names.append(_sanitize(e_val))
 
     # AA列: 記載があれば改行区切りで追加
-    if aa_val is not None and str(aa_val).strip():
-        entry.copyrights.append(str(aa_val).strip())
+    if aa_val is not None and _sanitize(aa_val):
+        entry.copyrights.append(_sanitize(aa_val))
 
     # AB列: 記載があれば続けて追記（改行で連結）
-    if ab_val is not None and str(ab_val).strip():
-        entry.license_texts.append(str(ab_val).strip())
+    if ab_val is not None and _sanitize(ab_val):
+        entry.license_texts.append(_sanitize(ab_val))
