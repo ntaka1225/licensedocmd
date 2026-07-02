@@ -10,7 +10,7 @@ from model import (
     load_excel, DummyWorksheet, OSSData, OSSEntry,
     _parse_worksheet, _Cell, START_ROW, COL_A, COL_B, COL_E, COL_AA, COL_AB
 )
-from controller import generate_text
+from controller import generate_text, _build_license_groups, SEPARATOR, LICENSE_SEP, TEXT_SEP
 
 PASS = "\033[32mPASS\033[0m"
 FAIL = "\033[31mFAIL\033[0m"
@@ -58,7 +58,7 @@ print("■ load_excel(use_dummy=True)")
 def _():
     data = load_excel(None, None, use_dummy=True)
     assert isinstance(data, OSSData)
-    assert len(data.entries) == 6, f"件数が想定と異なる: {len(data.entries)}"
+    assert len(data.entries) == 8, f"件数が想定と異なる: {len(data.entries)}"
 
 @test("requests: 通常1行完結エントリ")
 def _():
@@ -202,6 +202,104 @@ def _():
         raise AssertionError("例外が発生しなかった")
     except ValueError:
         pass
+
+
+# ------------------------------------------------------------------ #
+# 集約フォーマット（aggregate）                                         #
+# ------------------------------------------------------------------ #
+print("■ generate_text(aggregate)")
+
+@test("集約[Copyrights]: 全OSSが上から順に出力される")
+def _():
+    data = load_excel(None, None, use_dummy=True)
+    text = generate_text(data, "aggregate")
+    assert "[Copyrights]" in text, "[Copyrights]セクションが存在しない"
+    # 全OSSが出現するか確認
+    for entry in data.entries:
+        assert entry.oss_name in text, f"{entry.oss_name} が出力に含まれない"
+
+@test("集約[Copyrights]: Copyright表記が4スペースインデントで出力される")
+def _():
+    data = load_excel(None, None, use_dummy=True)
+    text = generate_text(data, "aggregate")
+    # requestsの著作権者が4スペースインデントで出力されているか
+    assert "    Copyright 2023 Kenneth Reitz" in text,         "Copyrightが4スペースインデントで出力されていない"
+
+@test("集約[Copyrights]: OSS名は[Copyrights]セクションに登場順で全件出力される")
+def _():
+    data = load_excel(None, None, use_dummy=True)
+    text = generate_text(data, "aggregate")
+    copyrights_section = text.split("[Licenses]")[0]
+    # 全エントリのOSS名が[Copyrights]セクションに含まれる
+    for entry in data.entries:
+        assert entry.oss_name in copyrights_section,             f"{entry.oss_name} が[Copyrights]セクションに含まれない"
+
+@test("集約[Licenses]: ライセンス原文が同一のエントリがグループ化される")
+def _():
+    data = load_excel(None, None, use_dummy=True)
+    groups = _build_license_groups(data)
+    # requests + requests-cache が同じApache-2.0原文 → 1グループ
+    apache_groups = [g for g in groups if "Apache-2.0" in g["license_names"]]
+    assert len(apache_groups) == 1,         f"Apache-2.0グループが1つになっていない: {len(apache_groups)}個"
+    assert set(apache_groups[0]["oss_names"]) == {"requests", "requests-cache"},         f"Apache-2.0グループのOSS名が想定と異なる: {apache_groups[0]['oss_names']}"
+
+@test("集約[Licenses]: ライセンス原文が異なるエントリは別グループになる")
+def _():
+    data = load_excel(None, None, use_dummy=True)
+    groups = _build_license_groups(data)
+    gpl_groups = [g for g in groups if "GPL-3.0" in g["license_names"]]
+    assert len(gpl_groups) == 1
+    assert gpl_groups[0]["oss_names"] == ["biglib"]
+
+@test("集約[Licenses]: ライセンス名が重複除去されて集約される")
+def _():
+    data = load_excel(None, None, use_dummy=True)
+    groups = _build_license_groups(data)
+    multilic_text = "MIT License\n\nPermission is hereby granted..."
+    mit_groups = [g for g in groups if g["license_text"] == multilic_text]
+    assert len(mit_groups) == 1, f"multilic+flask の集約グループが1つになっていない"
+    license_names = mit_groups[0]["license_names"]
+    assert license_names.count("MIT") == 1, f"MIT が重複している: {license_names}"
+    assert set(license_names) == {"MIT", "BSD-3-Clause", "GPL-2.0"},         f"ライセンス名が想定と異なる: {license_names}"
+    assert set(mit_groups[0]["oss_names"]) == {"multilic", "flask"},         f"グループのOSS名が想定と異なる: {mit_groups[0]['oss_names']}"
+
+@test("集約[Licenses]: 集約OSS名がカンマ区切りで4スペースインデント付きで出力される")
+def _():
+    data = load_excel(None, None, use_dummy=True)
+    text = generate_text(data, "aggregate")
+    # requests と requests-cache が同じ原文 → 集約されてカンマ区切りで出力
+    assert "    requests, requests-cache:" in text,         "集約OSS名のカンマ区切り・インデントが出力に含まれない"
+
+@test("集約[Licenses]: 単独OSSも正しくブロック出力される")
+def _():
+    data = load_excel(None, None, use_dummy=True)
+    text = generate_text(data, "aggregate")
+    licenses_section = text.split("[Licenses]")[1]
+    # biglib は原文が単独 → OSS名が1件だけのブロック
+    assert "    biglib:" in licenses_section,         "単独OSSのブロックが正しく出力されていない"
+
+@test("集約[Licenses]: セクション区切り文字が正しく出力される")
+def _():
+    data = load_excel(None, None, use_dummy=True)
+    text = generate_text(data, "aggregate")
+    licenses_section = text.split("[Licenses]")[1]
+    assert LICENSE_SEP in licenses_section, "LICENSE_SEP（70ハイフン）が出力に含まれない"
+    assert TEXT_SEP in licenses_section,    "TEXT_SEP（40ハイフン）が出力に含まれない"
+
+@test("集約[Licenses]: [Copyrights]には無いCopyright、[Licenses]には無いOSS名の混入がない")
+def _():
+    data = load_excel(None, None, use_dummy=True)
+    text = generate_text(data, "aggregate")
+    copyrights_section, licenses_section = text.split("[Licenses]")
+    # [Copyrights]セクションにライセンス区切り文字が混入していない
+    assert LICENSE_SEP not in copyrights_section,         "[Copyrights]セクションにLICENSE_SEPが混入している"
+
+@test("集約: defaultフォーマットはCopyrights/Licensesセクションを持たない")
+def _():
+    data = load_excel(None, None, use_dummy=True)
+    text = generate_text(data, "default")
+    assert "[Copyrights]" not in text, "defaultに[Copyrights]が含まれている"
+    assert "[Licenses]"   not in text, "defaultに[Licenses]が含まれている"
 
 
 # ------------------------------------------------------------------ #
