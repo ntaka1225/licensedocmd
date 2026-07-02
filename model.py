@@ -114,6 +114,26 @@ _DUMMY_ROWS = [
      COL_E:  None,
      COL_AA: None,
      COL_AB: "END OF TERMS AND CONDITIONS [part3]"},
+
+    # ── scipy: 集約ケース1 numpyと同じBSD-3-Clause原文 → 集約で同一ブロックになる
+    #   numpyと著作権者は異なるが、ライセンス原文が完全一致するため集約される
+    {COL_A: 14, COL_B: "scipy",
+     COL_E:  "BSD-3-Clause",
+     COL_AA: "Copyright (c) 2001-2002 Enthought, Inc. 2003-2024, SciPy Developers",
+     COL_AB: "BSD 3-Clause License\n\nRedistribution and use in source..."},
+
+    # ── 集約フォーマット用テストデータ
+    # requests-cache: requestsと同じApache-2.0原文 → 集約で同一ブロックになる
+    {COL_A: 15, COL_B: "requests-cache",
+     COL_E:  "Apache-2.0",
+     COL_AA: "Copyright 2021 Roman Haritonov",
+     COL_AB: "Apache License\nVersion 2.0, January 2004\nFull license text here."},
+
+    # flask: multilicと同じMIT原文 → 集約で同一ブロックになる
+    {COL_A: 16, COL_B: "flask",
+     COL_E:  "MIT",
+     COL_AA: "Copyright 2010 Pallets",
+     COL_AB: "MIT License\n\nPermission is hereby granted..."},
 ]
 
 
