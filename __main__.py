@@ -6,8 +6,8 @@ Usage:
 Arguments:
     filename   : 読み込むExcelファイルのパス
     sheetname  : 読み込むシート名
-    format     : 出力フォーマット名（省略時はデフォルト）
-    --test     : Excelファイル不要のダミーデータで動作確認
+    format     : 出力フォーマット名（省略時はデフォルト）、"aggregate" で集約フォーマット
+    --test     : Excelファイル不要のダミーデータで出力確認（フォーマット指定可）
 """
 
 import sys
@@ -21,7 +21,8 @@ def main():
 
     # --test オプションの判定
     if args and args[0] == "--test":
-        _run_test(format_name=args[1] if len(args) >= 2 else None)
+        format_name = args[1] if len(args) >= 2 else None
+        _run_test(format_name)
         return
 
     # 通常実行
