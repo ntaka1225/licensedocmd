@@ -54,11 +54,11 @@ def _():
 # ------------------------------------------------------------------ #
 print("■ load_excel(use_dummy=True)")
 
-@test("OSSData が生成される（4件）")
+@test("OSSData が生成される（9件）")
 def _():
     data = load_excel(None, None, use_dummy=True)
     assert isinstance(data, OSSData)
-    assert len(data.entries) == 8, f"件数が想定と異なる: {len(data.entries)}"
+    assert len(data.entries) == 9, f"件数が想定と異なる: {len(data.entries)}"
 
 @test("requests: 通常1行完結エントリ")
 def _():
@@ -153,7 +153,7 @@ def _():
 def _():
     data = load_excel(None, None, use_dummy=True)
     text = generate_text(data)
-    assert "a copy of the Program in return for a fee.\nEND OF TERMS AND CONDITIONS" in text, \
+    assert "a copy of the Program in return for a fee.\n\nEND OF TERMS AND CONDITIONS" in text, \
         "ライセンス原文の連結が出力に含まれない"
 
 @test("準正常系ケース3: License がカンマ区切りで出力される")
