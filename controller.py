@@ -18,7 +18,7 @@ DEFAULT_INDENT   = " " * len(COPYRIGHT_PREFIX)  # defaultフォーマット用11
 def format_default(entry: OSSEntry) -> str:
     copyright_str    = ("\n" + DEFAULT_INDENT).join(entry.copyrights)
     license_str      = ", ".join(entry.license_names)
-    license_text_str = "\n".join(entry.license_texts)
+    license_text_str = "\n\n".join(entry.license_texts)
 
     lines = [
         SEPARATOR,
@@ -47,12 +47,12 @@ def _build_license_groups(data: OSSData) -> list[dict]:
     """
     groups: dict[str, dict] = {}
     for entry in data.entries:
-        key = "\n".join(entry.license_texts)
+        key = "\n".join(entry.license_texts)          # 同一判定用キー（変更不可）
         if key not in groups:
             groups[key] = {
                 "license_names": [],
                 "oss_names":     [],
-                "license_text":  key,
+                "license_text":  "\n\n".join(entry.license_texts),  # 出力用（1行空け）
             }
         g = groups[key]
         g["oss_names"].append(entry.oss_name)
