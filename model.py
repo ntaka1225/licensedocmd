@@ -160,8 +160,13 @@ class DummyWorksheet:
 # ------------------------------------------------------------------ #
 
 def _sanitize(value) -> str:
-    """セル値を文字列化し、_x000C_（フォームフィード）を除去して返す。"""
-    return str(value).replace("_x000C_", "").strip()
+    """セル値を文字列化し、_x000C_（フォームフィード）を除去して返す。前後スペースは保持。"""
+    return str(value).replace("_x000C_", "")
+
+
+def _is_blank(value) -> bool:
+    """セル値が空欄（None または空白のみ）かどうかを返す。"""
+    return value is None or _sanitize(value).strip() == ""
 
 
 def load_excel(filepath: str, sheetname: str, use_dummy: bool = False) -> OSSData:
@@ -217,7 +222,7 @@ def _new_entry(ws, row_idx: int, oss_name: str) -> OSSEntry:
     values = {}
     for col, col_name in cols.items():
         val = ws.cell(row=row_idx, column=col).value
-        if val is None or _sanitize(val) == "":
+        if _is_blank(val):
             raise ValueError(
                 f"{row_idx}行, {col_name}列が空欄であるため中断、空欄は無いようにしてください"
             )
@@ -239,13 +244,13 @@ def _append_row(ws, row_idx: int, entry: OSSEntry):
     ab_val = ws.cell(row=row_idx, column=COL_AB).value
 
     # E列: 記載があればカンマ区切りで追加
-    if e_val is not None and _sanitize(e_val):
+    if not _is_blank(e_val):
         entry.license_names.append(_sanitize(e_val))
 
     # AA列: 記載があれば改行区切りで追加
-    if aa_val is not None and _sanitize(aa_val):
+    if not _is_blank(aa_val):
         entry.copyrights.append(_sanitize(aa_val))
 
     # AB列: 記載があれば続けて追記（改行で連結）
-    if ab_val is not None and _sanitize(ab_val):
+    if not _is_blank(ab_val):
         entry.license_texts.append(_sanitize(ab_val))
