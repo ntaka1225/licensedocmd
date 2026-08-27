@@ -169,7 +169,8 @@ def _is_blank(value) -> bool:
     return value is None or _sanitize(value).strip() == ""
 
 
-def load_excel(filepath: str, sheetname: str, use_dummy: bool = False) -> OSSData:
+def load_excel(filepath: str, sheetname: str, use_dummy: bool = False,
+               start_row: int = START_ROW, end_row: Optional[int] = None) -> OSSData:
     if use_dummy:
         ws = DummyWorksheet()
     else:
@@ -180,16 +181,20 @@ def load_excel(filepath: str, sheetname: str, use_dummy: bool = False) -> OSSDat
             )
         ws = wb[sheetname]
 
-    return _parse_worksheet(ws)
+    return _parse_worksheet(ws, start_row=start_row, end_row=end_row)
 
 
-def _parse_worksheet(ws) -> OSSData:
+def _parse_worksheet(ws, start_row: int = START_ROW,
+                     end_row: Optional[int] = None) -> OSSData:
     data = OSSData()
+    last_row = end_row if end_row is not None else ws.max_row
 
-    for row_idx in range(START_ROW, ws.max_row + 1):
-        a_val = ws.cell(row=row_idx, column=COL_A).value
-        if a_val is None or str(a_val).strip() == "":
-            break
+    for row_idx in range(start_row, last_row + 1):
+        # end_row 未指定のときはA列空欄で終端判定
+        if end_row is None:
+            a_val = ws.cell(row=row_idx, column=COL_A).value
+            if a_val is None or str(a_val).strip() == "":
+                break
 
         # B列（OSS名）は必須
         b_val = ws.cell(row=row_idx, column=COL_B).value
