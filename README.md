@@ -13,6 +13,7 @@ This program is designed to read data from a specified sheet within a designated
   - python \_\_main\_\_.exe oss_list.xlsx listsheet 
   - python \_\_main\_\_.exe oss_list.xlsx listsheet default
   - python \_\_main\_\_.exe oss_list.xlsx listsheet aggregate
+  - python \_\_main\_\_.exe oss_list.xlsx listsheet -start 7 -end 12
 
 ### options
 | Option | Description | Required | Default |
@@ -29,12 +30,13 @@ This program is designed to read data from a specified sheet within a designated
 - Move to the folder containing the script file.
   - cd [the folder containing the script]
 - Run the script file.
-  - python \_\_main\_\_.py <filename> <sheetname> [format]
+  - python \_\_main\_\_.exe \<filenmae\> \<sheetname\> \[format\] \[-start N\] \[-end N\]
 
 ### e.x
 - python \_\_main\_\_.py oss_list.xlsx listsheet 
 - python \_\_main\_\_.py oss_list.xlsx listsheet default
 - python \_\_main\_\_.py oss_list.xlsx listsheet aggregate
+- python \_\_main\_\_.py oss_list.xlsx listsheet -start 7 -end 12
 
 ---
 ## Test
