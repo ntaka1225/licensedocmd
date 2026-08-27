@@ -7,7 +7,7 @@ This program is designed to read data from a specified sheet within a designated
   - cd [the folder containing the .exe]
 
 - Run the .exe file.
-  - python \_\_main\_\_.exe \<filenmae\> \<sheetname\> \<format\>
+  - python \_\_main\_\_.exe \<filenmae\> \<sheetname\> \[format\] \[-start N\] \[-end N\]
 
 - e.x
   - python \_\_main\_\_.exe oss_list.xlsx listsheet 
@@ -20,6 +20,9 @@ This program is designed to read data from a specified sheet within a designated
 | filename | input file | yes | - |
 | sheetname | read sheet | yes | - |
 | format | output text format<br># Unspecified = default<br># \'aggregate\' is aggregation(=old style) format | no | default |
+| start | start row for reading in Excel | no | 9 |
+| end | end row for reading in Excel | no | Automatically determined if Column A is blank |
+
 
 ---
 ## Run the script file. 
